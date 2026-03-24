@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>I Love You ❤️</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000;
+  overflow:hidden;
+  width:100vw; height:100vh;
+  cursor:grab;
+  user-select:none;
+  -webkit-user-select:none;
+}
+body.dragging { cursor:grabbing; }
+canvas { display:block; }
+#hint {
+  position:fixed;
+  bottom:30px; left:50%;
+  transform:translateX(-50%);
+  color:rgba(255,100,180,0.75);
+  font-family:'Dancing Script',cursive;
+  font-size:18px;
+  pointer-events:none;
+  text-shadow:0 0 10px #ff1493;
+  animation:fadeHint 4s ease forwards 2s;
+  white-space:nowrap;
+}
+@keyframes fadeHint { 0%{opacity:1} 100%{opacity:0} }
+#cursor {
+  position:fixed; pointer-events:none; z-index:10;
+  font-size:20px; transform:translate(-50%,-50%);
+  filter:drop-shadow(0 0 6px #ff1493);
+}
+.sparkle {
+  position:fixed; pointer-events:none; z-index:9;
+  animation:sfade .9s forwards ease-out;
+}
+@keyframes sfade {
+  0%   { opacity:1; transform:translate(0,0) scale(1.1); }
+  100% { opacity:0; transform:translate(var(--sx),var(--sy)) scale(0); }
+}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">✦ Drag to look around ✦</div>
+<div id="cursor">❤️</div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   🖼️  YOUR IMAGES — edit this list to add/remove photos
+   Put your image files inside the  images/  folder
+   then list the filenames here:
+═══════════════════════════════════════════════════ */
+const IMAGE_FILES = [
+  'images/photo1.jpg',
+  'images/photo2.jpg',
+  'images/photo3.jpg',
+  'images/photo4.jpg',
+  'images/photo5.jpg',
+  'images/photo6.jpg',
+  // add more lines here, e.g.: 'images/photo7.jpg',
+];
+
+/* ═══════════════════════════════════════════════════
+   💬  CUSTOM TEXT  — change the floating message here
+═══════════════════════════════════════════════════ */
+const LOVE_TEXT = 'I love you';
+
+/* ═══════════════════════════════════════════════════
+   🎨  COLORS  — fill color + glow color pairs
+═══════════════════════════════════════════════════ */
+const COLORS = [
+  { fill:'#ff4da6', shadow:'#ff1493' },
+  { fill:'#dd66ff', shadow:'#9900ff' },
+  { fill:'#ffbbdd', shadow:'#ff69b4' },
+  { fill:'#ff88cc', shadow:'#ff0066' },
+];
+
+/* ──────────────────────────────────────────────────
+   Core setup — no need to edit below this line
+────────────────────────────────────────────────── */
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ── camera ── */
+let rotY=0, rotX=0, velY=0, velX=0;
+let dragging=false, lastMX=0, lastMY=0, dVX=0, dVY=0;
+
+canvas.addEventListener('mousedown',  e=>startDrag(e.clientX,e.clientY));
+canvas.addEventListener('mousemove',  e=>moveDrag(e.clientX,e.clientY));
+canvas.addEventListener('mouseup',    endDrag);
+canvas.addEventListener('mouseleave', endDrag);
+canvas.addEventListener('touchstart', e=>{e.preventDefault();const t=e.touches[0];startDrag(t.clientX,t.clientY);},{passive:false});
+canvas.addEventListener('touchmove',  e=>{e.preventDefault();const t=e.touches[0];moveDrag(t.clientX,t.clientY); },{passive:false});
+canvas.addEventListener('touchend',   endDrag);
+
+function startDrag(x,y){ dragging=true;lastMX=x;lastMY=y;dVX=0;dVY=0;document.body.classList.add('dragging'); }
+function moveDrag(x,y){
+  if(!dragging)return;
+  dVX=(x-lastMX)*0.005; dVY=(y-lastMY)*0.005;
+  rotY+=dVX; rotX+=dVY;
+  rotX=Math.max(-Math.PI/2.1,Math.min(Math.PI/2.1,rotX));
+  lastMX=x; lastMY=y;
+}
+function endDrag(){ if(!dragging)return; dragging=false; velY=dVX; velX=dVY; document.body.classList.remove('dragging'); }
+
+/* ── 3-D ── */
+function rotatePoint(px,py,pz){
+  let x1= px*Math.cos(-rotY)+pz*Math.sin(-rotY), y1=py, z1=-px*Math.sin(-rotY)+pz*Math.cos(-rotY);
+  let x2=x1, y2=y1*Math.cos(-rotX)-z1*Math.sin(-rotX), z2=y1*Math.sin(-rotX)+z1*Math.cos(-rotX);
+  return [x2,y2,z2];
+}
+const FOCAL=420;
+function project(x,y,z){
+  const d=FOCAL+z; if(d<=50)return null;
+  const s=FOCAL/d;
+  return {sx:x*s+W/2, sy:y*s+H/2, scale:s, depth:z};
+}
+
+/* ── stars ── */
+const STARS=Array.from({length:200},()=>({
+  x:Math.random()*2-1, y:Math.random()*2-1,
+  r:Math.random()*1.3+0.2, a:Math.random()*.7+.2,
+  tw:Math.random()*Math.PI*2, spd:Math.random()*.02+.006
+}));
+
+/* ── load images ── */
+// Fallback gradient canvas when an image fails or isn't provided
+const FALLBACK_PALETTES = [
+  ['#1a0030','#8b0045','#ff6b35'],
+  ['#0d0d2b','#1a237e','#e91e8c'],
+  ['#1a0010','#c62828','#ff8f00'],
+  ['#0a0a2e','#4a148c','#e91e8c'],
+  ['#000d1a','#006064','#ff4081'],
+  ['#180018','#4a0072','#ff80ab'],
+];
+
+function makeFallback(palIdx) {
+  const pw=130, ph=88;
+  const oc=document.createElement('canvas'); oc.width=pw; oc.height=ph;
+  const c=oc.getContext('2d');
+  const pal=FALLBACK_PALETTES[palIdx%FALLBACK_PALETTES.length];
+  const g=c.createLinearGradient(0,0,0,ph);
+  pal.forEach((col,i)=>g.addColorStop(i/(pal.length-1),col));
+  c.fillStyle=g; c.fillRect(0,0,pw,ph);
+  for(let i=0;i<25;i++){
+    c.beginPath(); c.arc(Math.random()*pw,Math.random()*(ph*.6),Math.random()*1.1+.2,0,Math.PI*2);
+    c.fillStyle=`rgba(255,255,255,${Math.random()*.6+.2})`; c.fill();
+  }
+  c.fillStyle='#000'; c.fillRect(0,ph*.73,pw,ph*.27);
+  const cx=pw/2,cy=ph*.73; c.fillStyle='#000';
+  c.beginPath();c.arc(cx-12,cy-26,6.5,0,Math.PI*2);c.fill();
+  c.beginPath();c.moveTo(cx-12,cy-19);c.lineTo(cx-18,cy);c.lineTo(cx-6,cy);c.closePath();c.fill();
+  c.beginPath();c.arc(cx+12,cy-24,5.5,0,Math.PI*2);c.fill();
+  c.beginPath();c.moveTo(cx+12,cy-18);c.lineTo(cx+6,cy);c.lineTo(cx+18,cy);c.closePath();c.fill();
+  const mg=c.createRadialGradient(pw*.7,ph*.22,0,pw*.7,ph*.22,25);
+  mg.addColorStop(0,'rgba(255,200,100,.9)'); mg.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle=mg; c.beginPath(); c.arc(pw*.7,ph*.22,25,0,Math.PI*2); c.fill();
+  return oc;
+}
+
+// Resize image to fit a target box maintaining aspect ratio
+function fitImage(img, targetW, targetH) {
+  const oc=document.createElement('canvas'); oc.width=targetW; oc.height=targetH;
+  const c=oc.getContext('2d');
+  const ratio = Math.max(targetW/img.width, targetH/img.height);
+  const sw=img.width*ratio, sh=img.height*ratio;
+  const ox=(targetW-sw)/2, oy=(targetH-sh)/2;
+  c.drawImage(img, ox, oy, sw, sh);
+  // Pink glow border overlay
+  c.strokeStyle='rgba(255,77,166,0.0)'; c.lineWidth=0; c.strokeRect(0,0,targetW,targetH);
+  return oc;
+}
+
+let photoCanvases = []; // resolved array of canvases (image or fallback)
+let imagesReady   = false;
+
+function loadImages(paths) {
+  const PW=130, PH=88;
+  const promises = paths.map((src, i) =>
+    new Promise(resolve => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload  = () => resolve(fitImage(img, PW, PH));
+      img.onerror = () => resolve(makeFallback(i)); // graceful fallback
+      img.src = src;
+    })
+  );
+  // If no images configured, fill with fallbacks
+  if (paths.length === 0) {
+    for (let i=0;i<6;i++) promises.push(Promise.resolve(makeFallback(i)));
+  }
+  Promise.all(promises).then(canvases => {
+    photoCanvases = canvases;
+    imagesReady   = true;
+    buildScene();
+    requestAnimationFrame(frame);
+  });
+}
+
+/* ── scene ── */
+const R = 480;
+function randSphere(r){ const u=Math.random()*2-1,t=Math.random()*Math.PI*2,s=Math.sqrt(1-u*u); return{x:r*s*Math.cos(t),y:r*u,z:r*s*Math.sin(t)}; }
+function rand(a,b){ return Math.random()*(b-a)+a; }
+const SIZES=[22,26,30,34,38,44,50,56];
+
+let els=[];
+function buildScene(){
+  els=[];
+  // texts
+  for(let i=0;i<55;i++){
+    const pos=randSphere(R*(0.7+Math.random()*0.5));
+    els.push({type:'text',...pos,
+      size:SIZES[Math.floor(Math.random()*SIZES.length)],
+      color:COLORS[Math.floor(Math.random()*COLORS.length)],
+      rotZ:rand(-25,25), pulsePhase:rand(0,Math.PI*2)});
+  }
+  // photos
+  const nPhotos=Math.max(photoCanvases.length*2,12);
+  for(let i=0;i<nPhotos;i++){
+    const pos=randSphere(R*(0.75+Math.random()*0.4));
+    els.push({type:'photo',...pos,
+      photoIdx:i%photoCanvases.length,
+      rotZ:rand(-18,18), rotYLocal:rand(0,Math.PI*2),
+      vrotYLocal:rand(-0.008,0.008), pulsePhase:rand(0,Math.PI*2)});
+  }
+  // hearts
+  for(let i=0;i<22;i++){
+    const pos=randSphere(R*(0.6+Math.random()*0.6));
+    els.push({type:'heart',...pos,size:rand(18,52),
+      pulsePhase:rand(0,Math.PI*2), spinPhase:rand(0,Math.PI*2)});
+  }
+}
+
+/* ── render loop ── */
+let t=0;
+function frame(ts){
+  t=ts*.001;
+  ctx.clearRect(0,0,W,H);
+
+  if(!dragging){
+    velY*=.93; velX*=.93;
+    rotY+=velY; rotX+=velX;
+    rotX=Math.max(-Math.PI/2.1,Math.min(Math.PI/2.1,rotX));
+    if(Math.abs(velY)<.0005) rotY+=.0008;
+  }
+
+  // stars
+  for(const s of STARS){
+    s.tw+=s.spd;
+    const a=s.a*(.4+.5*Math.sin(s.tw));
+    ctx.beginPath(); ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.shadowBlur=0; ctx.fill();
+  }
+
+  // project
+  const projected=[];
+  for(const el of els){
+    const [rx,ry,rz]=rotatePoint(el.x,el.y,el.z);
+    const p=project(rx,ry,rz); if(!p) continue;
+    let alpha=1;
+    if(rz<-FOCAL*.3) alpha=Math.max(0,1-(-rz-FOCAL*.3)/(FOCAL*.7));
+    if(alpha<=0) continue;
+    projected.push({el,...p,alpha});
+  }
+  projected.sort((a,b)=>a.depth-b.depth);
+
+  for(const item of projected){
+    const {el,sx,sy,scale,alpha}=item;
+    ctx.save();
+    ctx.translate(sx,sy);
+    ctx.scale(scale,scale);
+    ctx.rotate(el.rotZ*Math.PI/180);
+    ctx.globalAlpha=alpha;
+
+    if(el.type==='text'){
+      const pulse=1+.04*Math.sin(t*2+el.pulsePhase);
+      ctx.scale(pulse,pulse);
+      ctx.font=`bold ${el.size}px 'Dancing Script',cursive`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor=el.color.shadow; ctx.shadowBlur=28;
+      ctx.fillStyle=el.color.fill;
+      ctx.fillText(LOVE_TEXT,0,0);
+      ctx.shadowBlur=8; ctx.fillText(LOVE_TEXT,0,0);
+
+    } else if(el.type==='photo' && imagesReady){
+      el.rotYLocal+=el.vrotYLocal;
+      const squish=Math.abs(Math.cos(el.rotYLocal));
+      const img=photoCanvases[el.photoIdx];
+      const pw=img.width, ph=img.height;
+      ctx.scale(squish||0.01,1);
+      ctx.shadowColor='#ff1493'; ctx.shadowBlur=16;
+      ctx.strokeStyle='rgba(255,77,166,0.7)'; ctx.lineWidth=2/scale;
+      ctx.beginPath(); ctx.roundRect(-pw/2,-ph/2,pw,ph,6); ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(-pw/2,-ph/2,pw,ph,6); ctx.clip();
+      ctx.drawImage(img,-pw/2,-ph/2); ctx.restore();
+
+    } else if(el.type==='heart'){
+      const pulse=1+.1*Math.sin(t*3+el.pulsePhase);
+      ctx.scale(pulse,pulse);
+      ctx.font=`${el.size}px serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='#ff1493'; ctx.shadowBlur=20;
+      ctx.fillStyle='#ff4da6';
+      ctx.fillText('❤',0,0);
+    }
+
+    ctx.restore();
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ── cursor / sparkles ── */
+const cursorEl=document.getElementById('cursor');
+const SPARKS=['❤','💕','✨','💗','💖','★'];
+let lastSpark=0;
+document.addEventListener('mousemove',e=>{
+  cursorEl.style.left=e.clientX+'px'; cursorEl.style.top=e.clientY+'px';
+  const now=Date.now();
+  if(now-lastSpark>130){
+    lastSpark=now;
+    const s=document.createElement('div');
+    s.className='sparkle';
+    s.textContent=SPARKS[Math.floor(Math.random()*SPARKS.length)];
+    s.style.cssText=`left:${e.clientX}px;top:${e.clientY}px;font-size:${12+Math.random()*8}px`;
+    s.style.setProperty('--sx',rand(-40,40)+'px');
+    s.style.setProperty('--sy',rand(-60,-10)+'px');
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),900);
+  }
+});
+
+// Kick off
+loadImages(IMAGE_FILES);
+</script>
+</body>
+</html>
