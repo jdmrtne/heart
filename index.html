@@ -13,383 +13,483 @@ html, body {
   -webkit-tap-highlight-color:transparent;
 }
 canvas { display:block; touch-action:none; }
-
 #hint {
   position:fixed;
-  bottom:max(24px, env(safe-area-inset-bottom, 24px));
+  bottom:max(20px, env(safe-area-inset-bottom, 20px));
   left:50%; transform:translateX(-50%);
   color:rgba(255,120,190,0.85);
   font-family:'Dancing Script',cursive;
-  font-size:clamp(13px,3.5vw,17px);
+  font-size:clamp(13px,3.5vw,16px);
   pointer-events:none;
-  text-shadow:0 0 12px #ff1493;
+  text-shadow:0 0 10px #ff1493;
   white-space:nowrap;
-  animation:fadeHint 3.5s ease forwards 2.5s;
+  animation:fadeHint 3s ease forwards 2s;
 }
 @keyframes fadeHint{ 0%{opacity:1} 100%{opacity:0} }
-
 #zoom-btns {
   position:fixed;
-  right:max(16px, env(safe-area-inset-right, 16px));
+  right:max(14px, env(safe-area-inset-right, 14px));
   top:50%; transform:translateY(-50%);
-  display:flex; flex-direction:column; gap:12px; z-index:20;
+  display:flex; flex-direction:column; gap:10px; z-index:20;
 }
 .zbtn {
-  width:clamp(40px,11vw,50px); height:clamp(40px,11vw,50px);
+  width:clamp(38px,10vw,48px); height:clamp(38px,10vw,48px);
   background:rgba(255,20,147,0.18);
   border:1.5px solid rgba(255,77,166,0.5);
   border-radius:50%;
-  color:#ff4da6; font-size:clamp(18px,5vw,24px); line-height:1;
+  color:#ff4da6; font-size:clamp(18px,5vw,22px); line-height:1;
   display:flex; align-items:center; justify-content:center;
   cursor:pointer;
-  text-shadow:0 0 8px #ff1493;
-  box-shadow:0 0 14px rgba(255,20,147,0.25);
   -webkit-tap-highlight-color:transparent;
   user-select:none; transition:background .15s;
 }
 .zbtn:active { background:rgba(255,20,147,0.45); }
+
+#music-btn {
+  position:fixed;
+  left:max(14px, env(safe-area-inset-left, 14px));
+  top:max(14px, env(safe-area-inset-top, 14px));
+  width:clamp(38px,10vw,48px); height:clamp(38px,10vw,48px);
+  background:rgba(255,20,147,0.18);
+  border:1.5px solid rgba(255,77,166,0.5);
+  border-radius:50%;
+  color:#ff4da6; font-size:clamp(16px,4.5vw,20px); line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; z-index:20;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+  transition:background .15s, opacity .2s;
+}
+#music-btn:active { background:rgba(255,20,147,0.45); }
+#music-btn.muted { opacity:0.38; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
 </head>
 <body>
 <canvas id="c"></canvas>
+<audio id="bgm" src="music.mp3" loop preload="auto"></audio>
 <div id="hint">✦ Drag to spin · Pinch or scroll to zoom ✦</div>
 <div id="zoom-btns">
   <div class="zbtn" id="zin">+</div>
   <div class="zbtn" id="zout">−</div>
 </div>
+<div id="music-btn" title="Toggle music">♪</div>
 
 <script>
-/* ═══════════════════════════════════════════════
-   🖼️  YOUR IMAGES — put files in images/ folder
-═══════════════════════════════════════════════ */
-const IMAGE_FILES = [
-  'images/photo1.jpg',
-  'images/photo2.jpg',
-  'images/photo3.jpg',
-  'images/photo4.jpg',
-  'images/photo5.jpg',
-  'images/photo6.jpg',
-];
+/* ═══════════════════════
+   MUSIC
+   ═══════════════════════ */
+const bgm = document.getElementById('bgm');
+const musicBtn = document.getElementById('music-btn');
+let musicPlaying = false;
 
-/* ═══════════════════════════════════════════════
-   💬  FLOATING TEXT
-═══════════════════════════════════════════════ */
+function tryPlay(){
+  const p = bgm.play();
+  if(p && p.then){
+    p.then(()=>{ musicPlaying=true; musicBtn.classList.remove('muted'); })
+     .catch(()=>{ musicPlaying=false; musicBtn.classList.add('muted'); });
+  }
+}
+
+/* Try autoplay on load */
+window.addEventListener('load', tryPlay);
+
+/* Unlock on first interaction (required by most mobile browsers) */
+function unlockAudio(){
+  if(!musicPlaying){ tryPlay(); }
+  document.removeEventListener('pointerdown', unlockAudio);
+  document.removeEventListener('touchstart', unlockAudio);
+}
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
+
+/* Toggle button */
+musicBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  if(musicPlaying){
+    bgm.pause();
+    musicPlaying=false;
+    musicBtn.classList.add('muted');
+  } else {
+    bgm.play().then(()=>{ musicPlaying=true; musicBtn.classList.remove('muted'); }).catch(()=>{});
+  }
+});
+
+
+/* ═══════════════════════
+   CONFIG
+   ═══════════════════════ */
+const IMAGE_FILES = [
+  'images/photo1.jpg','images/photo2.jpg','images/photo3.jpg',
+  'images/photo4.jpg','images/photo5.jpg','images/photo6.jpg',
+];
 const LOVE_TEXT = 'I love you';
 
-/* ═══════════════════════════════════════════════
-   🎨  GLOW COLORS
-═══════════════════════════════════════════════ */
-const COLORS = [
-  {fill:'#ff4da6', shadow:'#ff1493'},
-  {fill:'#dd66ff', shadow:'#9900ff'},
-  {fill:'#ffbbdd', shadow:'#ff69b4'},
-  {fill:'#ff88cc', shadow:'#ff0066'},
-];
+/* ── detect mobile for reduced quality ── */
+const IS_MOBILE = ('ontouchstart' in window) || (window.innerWidth < 768);
 
-/* ─── canvas ─── */
+/* ── canvas ── */
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 let W, H, DPR;
-
 function resize(){
-  DPR = Math.min(window.devicePixelRatio||1, 2);
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width  = W * DPR;
-  canvas.height = H * DPR;
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  DPR = IS_MOBILE ? Math.min(window.devicePixelRatio||1, 1.5) : Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width  = W*DPR; canvas.height = H*DPR;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-window.addEventListener('resize', resize);
-resize();
+window.addEventListener('resize', resize); resize();
 
-/* ─── camera ─── */
-let rotY = 0, rotX = 0;
-let velY = 0, velX = 0;
-let zoom = 1.0, targetZoom = 1.0;
-const ZOOM_MIN = 0.35, ZOOM_MAX = 2.4;
+/* ── camera ── */
+let rotY=0, rotX=0, velY=0, velX=0;
+let zoom=1.0, targetZoom=1.0;
+const ZOOM_MIN=0.35, ZOOM_MAX=2.4;
 
-/* ─── drag (mouse) ─── */
-let dragging = false, lastMX = 0, lastMY = 0, dVX = 0, dVY = 0;
-
-function startDrag(x, y){ dragging=true; lastMX=x; lastMY=y; dVX=0; dVY=0; }
-function moveDrag(x, y){
-  if(!dragging) return;
-  dVX = (x - lastMX) * 0.005;
-  dVY = (y - lastMY) * 0.004;
-  rotY += dVX;
-  rotX += dVY;
-  rotX = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, rotX));
-  lastMX = x; lastMY = y;
+/* ── mouse drag ── */
+let dragging=false, lastMX=0, lastMY=0, dVX=0, dVY=0;
+function startDrag(x,y){ dragging=true; lastMX=x; lastMY=y; dVX=0; dVY=0; }
+function moveDrag(x,y){
+  if(!dragging)return;
+  dVX=(x-lastMX)*0.005; dVY=(y-lastMY)*0.004;
+  rotY+=dVX; rotX+=dVY;
+  rotX=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,rotX));
+  lastMX=x; lastMY=y;
 }
 function endDrag(){ if(!dragging)return; dragging=false; velY=dVX; velX=dVY; }
+canvas.addEventListener('mousedown', e=>startDrag(e.clientX,e.clientY));
+window.addEventListener ('mousemove', e=>moveDrag (e.clientX,e.clientY));
+window.addEventListener ('mouseup',   endDrag);
 
-canvas.addEventListener('mousedown',  e => startDrag(e.clientX, e.clientY));
-window.addEventListener('mousemove',  e => moveDrag(e.clientX, e.clientY));
-window.addEventListener('mouseup',    endDrag);
-
-/* ─── scroll zoom ─── */
-canvas.addEventListener('wheel', e => {
+canvas.addEventListener('wheel',e=>{
   e.preventDefault();
-  targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom + (e.deltaY > 0 ? -0.12 : 0.12)));
-}, {passive:false});
+  targetZoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,targetZoom+(e.deltaY>0?-0.12:0.12)));
+},{passive:false});
 
-/* ─── touch (drag + pinch) ─── */
-let activeTouches = {};
-let lastPinchDist = null;
-
-canvas.addEventListener('touchstart', e => {
+let lastPinchDist=null;
+canvas.addEventListener('touchstart',e=>{
   e.preventDefault();
-  for(const t of e.changedTouches) activeTouches[t.identifier] = {x:t.clientX, y:t.clientY};
-  if(e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
-  if(e.touches.length >= 2){ dragging=false; lastPinchDist=null; }
-}, {passive:false});
-
-canvas.addEventListener('touchmove', e => {
+  if(e.touches.length===1) startDrag(e.touches[0].clientX,e.touches[0].clientY);
+  if(e.touches.length>=2){ dragging=false; lastPinchDist=null; }
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
   e.preventDefault();
-  if(e.touches.length === 1 && dragging){
-    moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+  if(e.touches.length===1&&dragging) moveDrag(e.touches[0].clientX,e.touches[0].clientY);
+  if(e.touches.length>=2){
+    const t0=e.touches[0],t1=e.touches[1];
+    const d=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
+    if(lastPinchDist!==null) targetZoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,targetZoom+(d-lastPinchDist)*0.006));
+    lastPinchDist=d;
   }
-  if(e.touches.length >= 2){
-    const t0=e.touches[0], t1=e.touches[1];
-    const dx=t0.clientX-t1.clientX, dy=t0.clientY-t1.clientY;
-    const dist=Math.sqrt(dx*dx+dy*dy);
-    if(lastPinchDist !== null){
-      const delta = (dist - lastPinchDist) * 0.006;
-      targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom + delta));
-    }
-    lastPinchDist = dist;
-  }
-}, {passive:false});
-
-canvas.addEventListener('touchend', e => {
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
   e.preventDefault();
-  for(const t of e.changedTouches) delete activeTouches[t.identifier];
-  if(e.touches.length < 2) lastPinchDist = null;
-  if(e.touches.length === 0) endDrag();
-}, {passive:false});
+  if(e.touches.length<2) lastPinchDist=null;
+  if(e.touches.length===0) endDrag();
+},{passive:false});
 
-/* ─── zoom buttons ─── */
-document.getElementById('zin').addEventListener('click',  () => targetZoom = Math.min(ZOOM_MAX, targetZoom+0.22));
-document.getElementById('zout').addEventListener('click', () => targetZoom = Math.max(ZOOM_MIN, targetZoom-0.22));
+document.getElementById('zin') .addEventListener('click',()=>targetZoom=Math.min(ZOOM_MAX,targetZoom+0.22));
+document.getElementById('zout').addEventListener('click',()=>targetZoom=Math.max(ZOOM_MIN,targetZoom-0.22));
 
-/* ─── stars ─── */
-const STARS = Array.from({length:160}, () => ({
-  x: Math.random()*2-1, y: Math.random()*2-1,
-  r: Math.random()*1.2+0.2,
-  a: Math.random()*.7+.2,
-  tw: Math.random()*Math.PI*2,
-  spd: Math.random()*.018+.005
+/* ── stars ── */
+const STAR_COUNT = IS_MOBILE ? 60 : 120;
+const STARS = Array.from({length:STAR_COUNT},()=>({
+  x:Math.random()*2-1, y:Math.random()*2-1,
+  r:Math.random()*1.0+0.2, a:Math.random()*.6+.2,
+  tw:Math.random()*Math.PI*2, spd:Math.random()*.015+.004
 }));
 
-/* ─── fallback photos (gradient silhouette) ─── */
-const FB_PALS = [
-  ['#1a0030','#8b0045','#ff6b35'], ['#0d0d2b','#1a237e','#e91e8c'],
-  ['#1a0010','#c62828','#ff8f00'], ['#0a0a2e','#4a148c','#e91e8c'],
-  ['#000d1a','#006064','#ff4081'], ['#180018','#4a0072','#ff80ab'],
+/* ═══════════════════════════════════════════════════
+   HEART SHAPE
+   Elements are arranged on a heart-shaped tube.
+   The cross-section of the tube traces the heart
+   parametric curve in the XZ plane, so spinning
+   reveals the heart silhouette from all angles.
+   ═══════════════════════════════════════════════════ */
+
+/* Scale so the heart's widest point (~16 units) ≈ 320px */
+const HEART_SCALE = 20;
+
+/**
+ * Returns {x, z} on the heart curve at parameter t (0 – 2π).
+ * The heart points downward (-z = tip, +z = bumps top).
+ */
+function heartPoint(t){
+  const x =  HEART_SCALE * 16 * Math.pow(Math.sin(t), 3);
+  /* Negate so bumps face viewer (positive Z = closer) */
+  const z = -HEART_SCALE * (13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t));
+  return { x, z };
+}
+
+/* Pre-compute arc-length-ish normal for outward offset */
+function heartNormal(t){
+  const eps = 0.01;
+  const a = heartPoint(t - eps);
+  const b = heartPoint(t + eps);
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const len = Math.sqrt(dx*dx + dz*dz) || 1;
+  /* outward normal = perpendicular to tangent, pointing away from centroid */
+  return { nx: dz/len, nz: -dx/len };
+}
+
+/* ── sprite setup ── */
+const TEXT_COLORS = [
+  {fill:'#ff4da6', glow:'#ff1493'},
+  {fill:'#dd66ff', glow:'#9900ff'},
+  {fill:'#ffbbdd', glow:'#ff69b4'},
+  {fill:'#ff88cc', glow:'#ff0066'},
+  {fill:'#ff6ec7', glow:'#ff1493'},
+  {fill:'#ee99ff', glow:'#cc00ff'},
+];
+
+function makeTextSprite(text, fontSize, colorObj){
+  const oc = document.createElement('canvas');
+  const c  = oc.getContext('2d');
+  c.font = `bold ${fontSize}px 'Dancing Script',cursive`;
+  const tw = Math.ceil(c.measureText(text).width) + 24;
+  const th = fontSize + 20;
+  oc.width = tw; oc.height = th;
+  c.font = `bold ${fontSize}px 'Dancing Script',cursive`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.shadowColor = colorObj.glow; c.shadowBlur = 14;
+  c.fillStyle = colorObj.glow; c.fillText(text, tw/2, th/2);
+  c.shadowBlur = 0; c.fillStyle = colorObj.fill;
+  c.fillText(text, tw/2, th/2);
+  return oc;
+}
+
+function makeHeartSprite(size){
+  const pad = 8;
+  const oc  = document.createElement('canvas');
+  oc.width = size + pad*2; oc.height = size + pad*2;
+  const c  = oc.getContext('2d');
+  c.font = `${size}px serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.shadowColor = '#ff1493'; c.shadowBlur = 12;
+  c.fillStyle = '#ff4da6'; c.fillText('❤', oc.width/2, oc.height/2);
+  c.shadowBlur = 0; c.fillStyle = '#ff88cc';
+  c.fillText('❤', oc.width/2, oc.height/2);
+  return oc;
+}
+
+const FB_PALS=[
+  ['#1a0030','#8b0045','#ff6b35'],['#0d0d2b','#1a237e','#e91e8c'],
+  ['#1a0010','#c62828','#ff8f00'],['#0a0a2e','#4a148c','#e91e8c'],
+  ['#000d1a','#006064','#ff4081'],['#180018','#4a0072','#ff80ab'],
 ];
 function makeFallback(i){
-  const pw=130, ph=88, oc=document.createElement('canvas');
+  const pw=90,ph=62,oc=document.createElement('canvas');
   oc.width=pw; oc.height=ph;
-  const c=oc.getContext('2d'), pal=FB_PALS[i%FB_PALS.length];
+  const c=oc.getContext('2d'),pal=FB_PALS[i%FB_PALS.length];
   const g=c.createLinearGradient(0,0,0,ph);
   pal.forEach((col,j)=>g.addColorStop(j/(pal.length-1),col));
   c.fillStyle=g; c.fillRect(0,0,pw,ph);
-  for(let k=0;k<22;k++){
-    c.beginPath(); c.arc(Math.random()*pw,Math.random()*(ph*.6),Math.random()*1.1+.2,0,Math.PI*2);
-    c.fillStyle=`rgba(255,255,255,${Math.random()*.6+.2})`; c.fill();
+  for(let k=0;k<14;k++){
+    c.beginPath(); c.arc(Math.random()*pw,Math.random()*(ph*.6),Math.random()*1+.2,0,Math.PI*2);
+    c.fillStyle=`rgba(255,255,255,${Math.random()*.5+.2})`; c.fill();
   }
-  c.fillStyle='#000'; c.fillRect(0,ph*.73,pw,ph*.27);
-  const cx=pw/2, cy=ph*.73; c.fillStyle='#000';
-  c.beginPath();c.arc(cx-12,cy-26,6.5,0,Math.PI*2);c.fill();
-  c.beginPath();c.moveTo(cx-12,cy-19);c.lineTo(cx-18,cy);c.lineTo(cx-6,cy);c.closePath();c.fill();
-  c.beginPath();c.arc(cx+12,cy-24,5.5,0,Math.PI*2);c.fill();
-  c.beginPath();c.moveTo(cx+12,cy-18);c.lineTo(cx+6,cy);c.lineTo(cx+18,cy);c.closePath();c.fill();
-  const mg=c.createRadialGradient(pw*.7,ph*.22,0,pw*.7,ph*.22,25);
-  mg.addColorStop(0,'rgba(255,200,100,.9)'); mg.addColorStop(1,'rgba(0,0,0,0)');
-  c.fillStyle=mg; c.beginPath(); c.arc(pw*.7,ph*.22,25,0,Math.PI*2); c.fill();
+  c.fillStyle='rgba(255,70,160,0.35)'; c.fillRect(0,0,pw,ph);
+  c.strokeStyle='rgba(255,77,166,0.8)'; c.lineWidth=2;
+  c.beginPath(); c.roundRect(1,1,pw-2,ph-2,4); c.stroke();
   return oc;
 }
-function fitImage(img, tw, th){
+function fitImage(img,tw,th){
   const oc=document.createElement('canvas'); oc.width=tw; oc.height=th;
-  const c=oc.getContext('2d'), r=Math.max(tw/img.width, th/img.height);
+  const c=oc.getContext('2d'),r=Math.max(tw/img.width,th/img.height);
   c.drawImage(img,(tw-img.width*r)/2,(th-img.height*r)/2,img.width*r,img.height*r);
+  c.strokeStyle='rgba(255,77,166,0.75)'; c.lineWidth=2;
+  c.beginPath(); c.roundRect(1,1,tw-2,th-2,4); c.stroke();
   return oc;
 }
 
+let TEXT_SPRITES  = [];
+let HEART_SPRITES = [];
 let photoCanvases = [];
+
+const TEXT_SIZES  = IS_MOBILE ? [14,16,18,20,22] : [14,16,18,20,22,24,26];
+const HEART_SIZES = [12,16,20,26,32];
+
+function buildSprites(){
+  TEXT_SPRITES  = TEXT_COLORS.map(col => TEXT_SIZES.map(sz => makeTextSprite(LOVE_TEXT, sz, col)));
+  HEART_SPRITES = HEART_SIZES.map(sz => makeHeartSprite(sz));
+}
+
 function loadImages(paths){
-  const PW=130, PH=88;
+  const PW=90, PH=62;
   const list = paths.length ? paths : Array.from({length:6},(_,i)=>null);
-  Promise.all(list.map((src,i) => new Promise(res => {
+  Promise.all(list.map((src,i)=>new Promise(res=>{
     if(!src) return res(makeFallback(i));
     const img=new Image(); img.crossOrigin='anonymous';
-    img.onload  = () => res(fitImage(img, PW, PH));
-    img.onerror = () => res(makeFallback(i));
-    img.src = src;
-  }))).then(c => { photoCanvases=c; buildScene(); requestAnimationFrame(frame); });
+    img.onload=()=>res(fitImage(img,PW,PH));
+    img.onerror=()=>res(makeFallback(i));
+    img.src=src;
+  }))).then(c=>{ photoCanvases=c; buildSprites(); buildScene(); requestAnimationFrame(frame); });
 }
 
-/* ─── CYLINDER scene layout ─── */
-const CYL_R  = 360;  // radius of cylinder
-const CYL_H  = 580;  // height span of cylinder
-const FOCAL  = 500;
+/* ══════════════════════════════════════════════════
+   SCENE  —  heart-shaped arrangement
+   ══════════════════════════════════════════════════ */
+const CYL_H       = 2000;
+const FOCAL       = 500;
+const FALL_TOP    = -CYL_H / 2;
+const FALL_BOTTOM =  CYL_H / 2;
+const FALL_RANGE  =  CYL_H;
+
+const NUM_COLS  = IS_MOBILE ? 18 : 24;
+const NUM_ROWS  = IS_MOBILE ? 22 : 28;
+const ANG_STEP  = (Math.PI*2) / NUM_COLS;
+const ROW_STEP  = CYL_H / NUM_ROWS;
 
 function rand(a,b){ return Math.random()*(b-a)+a; }
-const SIZES = [20,24,28,32,36,42,48];
+
 let els = [];
 
 function buildScene(){
   els = [];
+  for(let row=0; row<NUM_ROWS; row++){
+    for(let col=0; col<NUM_COLS; col++){
+      /* ── Heart shape: each column maps to a point on the heart curve ── */
+      const t = col * ANG_STEP + rand(-ANG_STEP * 0.12, ANG_STEP * 0.12);
+      const { x: hx, z: hz } = heartPoint(t);
+      const { nx, nz }       = heartNormal(t);
+      /* Small outward offset gives the tube slight thickness */
+      const offset = rand(-14, 22);
+      const baseX  = hx + nx * offset;
+      const baseZ  = hz + nz * offset;
 
-  // Distribute angles evenly around cylinder for each layer type
-  function cylPt(jitter=50){
-    const angle = rand(0, Math.PI*2);
-    const r = CYL_R + rand(-jitter, jitter);
-    return { x: r*Math.cos(angle), z: r*Math.sin(angle), y: rand(-CYL_H/2, CYL_H/2) };
-  }
+      const y = FALL_TOP + row*ROW_STEP + rand(-ROW_STEP*.38, ROW_STEP*.38);
+      const fallSpeed  = rand(0.10, 0.38);
+      const pulsePhase = rand(0, Math.PI*2);
+      const rotZ       = rand(-18, 18);
+      const rnd = Math.random();
 
-  // Texts — wrap around cylinder
-  for(let i=0;i<58;i++){
-    const pt = cylPt(35);
-    els.push({ type:'text', ...pt,
-      size:  SIZES[Math.floor(Math.random()*SIZES.length)],
-      color: COLORS[Math.floor(Math.random()*COLORS.length)],
-      rotZ:  rand(-22,22),
-      pulsePhase: rand(0,Math.PI*2) });
-  }
-
-  // Photos — on the cylinder wall
-  const nP = Math.max(photoCanvases.length*2, 10);
-  for(let i=0;i<nP;i++){
-    const pt = cylPt(20);
-    els.push({ type:'photo', ...pt,
-      photoIdx:   i % photoCanvases.length,
-      rotZ:       rand(-14,14),
-      rotYLocal:  rand(0,Math.PI*2),
-      vrotYLocal: rand(-0.007,0.007),
-      pulsePhase: rand(0,Math.PI*2) });
-  }
-
-  // Hearts — scattered at varying depths
-  for(let i=0;i<22;i++){
-    const pt = cylPt(100); // hearts spread wider
-    els.push({ type:'heart', ...pt,
-      size: rand(16,50),
-      pulsePhase: rand(0,Math.PI*2) });
+      if(rnd < 0.55){
+        els.push({ type:'text', baseX, baseZ, y, rotZ, pulsePhase, fallSpeed,
+          colorIdx: Math.floor(Math.random()*TEXT_COLORS.length),
+          sizeIdx:  Math.floor(Math.random()*TEXT_SIZES.length),
+        });
+      } else if(rnd < 0.75){
+        els.push({ type:'photo', baseX, baseZ, y,
+          rotZ: rand(-10,10), pulsePhase, fallSpeed,
+          photoIdx:  Math.floor(Math.random()*Math.max(photoCanvases.length,1)),
+          rotYLocal: rand(0,Math.PI*2),
+          vrotY:     IS_MOBILE ? 0 : rand(-0.005,0.005),
+        });
+      } else {
+        els.push({ type:'heart', baseX, baseZ, y, rotZ, pulsePhase, fallSpeed,
+          sizeIdx: Math.floor(Math.random()*HEART_SIZES.length),
+        });
+      }
+    }
   }
 }
 
-/* ─── 3D transform ─── */
-function transformPt(px, py, pz){
-  // Spin around Y axis
-  const cy=Math.cos(-rotY), sy=Math.sin(-rotY);
-  let x1= px*cy + pz*sy, y1=py, z1=-px*sy + pz*cy;
-  // Tilt around X axis
-  const cx=Math.cos(-rotX), sx=Math.sin(-rotX);
-  return [ x1, y1*cx - z1*sx, y1*sx + z1*cx ];
+/* ── 3-D transform + project ── */
+function transformPt(px,py,pz){
+  const cy=Math.cos(-rotY),sy=Math.sin(-rotY);
+  const x1=px*cy+pz*sy, y1=py, z1=-px*sy+pz*cy;
+  const cx=Math.cos(-rotX),sx=Math.sin(-rotX);
+  return [x1, y1*cx-z1*sx, y1*sx+z1*cx];
+}
+function project(x,y,z){
+  const d=FOCAL+z; if(d<20)return null;
+  const s=(FOCAL/d)*zoom;
+  return {sx:x*s+W/2, sy:y*s+H/2, scale:s, depth:z};
 }
 
-function project(x, y, z){
-  const d = FOCAL + z;
-  if(d < 20) return null;
-  const s = (FOCAL / d) * zoom;
-  return { sx: x*s + W/2, sy: y*s + H/2, scale: s, depth: z };
-}
-
-/* ─── render loop ─── */
-let t = 0;
+/* ── render loop ── */
+let t_time=0, lastTime=0;
 function frame(ts){
-  t = ts * .001;
-  ctx.clearRect(0, 0, W, H);
+  const dt = Math.min(ts - lastTime, 50);
+  lastTime = ts;
+  t_time = ts * .001;
 
-  // Smooth zoom
-  zoom += (targetZoom - zoom) * 0.1;
+  ctx.clearRect(0,0,W,H);
+  zoom += (targetZoom-zoom)*0.1;
 
-  // Inertia + auto-spin
   if(!dragging){
-    velY *= .92; velX *= .92;
-    rotY += velY; rotX += velX;
-    rotX = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, rotX));
-    if(Math.abs(velY) < .001) rotY += .0007;
+    velY*=.92; velX*=.92;
+    rotY+=velY; rotX+=velX;
+    rotX=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,rotX));
+    if(Math.abs(velY)<.001) rotY+=.0008;
   }
 
-  // Stars (screen-space, unaffected by zoom)
+  /* stars */
   for(const s of STARS){
-    s.tw += s.spd;
-    const a = s.a*(.35 + .55*Math.sin(s.tw));
-    ctx.beginPath(); ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2);
-    ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.shadowBlur=0; ctx.fill();
+    s.tw+=s.spd;
+    ctx.beginPath(); ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${(s.a*(.35+.55*Math.sin(s.tw))).toFixed(2)})`;
+    ctx.fill();
   }
 
-  // Project + sort
+  const dtScale = dt / 16.67;
   const projected = [];
+
   for(const el of els){
-    const floatY = el.y + Math.sin(t*.45 + el.pulsePhase) * 7;
-    const [rx,ry,rz] = transformPt(el.x, floatY, el.z);
-    const p = project(rx, ry, rz);
+    el.y += el.fallSpeed * dtScale;
+    if(el.y > FALL_BOTTOM + 80) el.y -= FALL_RANGE + 160;
+
+    const floatY = el.y + Math.sin(t_time*.4 + el.pulsePhase) * 3;
+    const [rx,ry,rz] = transformPt(el.baseX, floatY, el.baseZ);
+    const p = project(rx,ry,rz);
     if(!p) continue;
-    // Fade elements behind viewer
-    let alpha = 1;
-    const behind = -FOCAL * 0.2;
-    if(rz < behind) alpha = Math.max(0, 1 - (-rz + behind)/(FOCAL*.8));
-    if(alpha < 0.02) continue;
+
+    const halfSprite = 80 * p.scale;
+    if(p.sx < -halfSprite || p.sx > W+halfSprite ||
+       p.sy < -halfSprite || p.sy > H+halfSprite) continue;
+
+    let alpha=1;
+    const behind=-FOCAL*.15;
+    if(rz<behind) alpha=Math.max(0,1-(-rz+behind)/(FOCAL*.8));
+    if(alpha<0.03) continue;
+
     projected.push({el, ...p, alpha});
   }
-  projected.sort((a,b) => a.depth - b.depth);
+
+  projected.sort((a,b)=>a.depth-b.depth);
 
   for(const item of projected){
-    const {el, sx, sy, scale, alpha} = item;
+    const {el,sx,sy,scale,alpha}=item;
     ctx.save();
-    ctx.translate(sx, sy);
-    ctx.scale(scale, scale);
-    ctx.rotate(el.rotZ * Math.PI/180);
-    ctx.globalAlpha = alpha;
+    ctx.translate(sx,sy);
+    ctx.globalAlpha=alpha;
 
-    if(el.type === 'text'){
-      const p = 1 + .04*Math.sin(t*2 + el.pulsePhase);
-      ctx.scale(p, p);
-      ctx.font = `bold ${el.size}px 'Dancing Script',cursive`;
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.shadowColor = el.color.shadow; ctx.shadowBlur = 28;
-      ctx.fillStyle   = el.color.fill;
-      ctx.fillText(LOVE_TEXT, 0, 0);
-      ctx.shadowBlur  = 7;
-      ctx.fillText(LOVE_TEXT, 0, 0);
+    if(el.type==='text'){
+      const sp = TEXT_SPRITES[el.colorIdx]?.[el.sizeIdx];
+      if(!sp){ ctx.restore(); continue; }
+      const pulse = 1 + .04*Math.sin(t_time*2+el.pulsePhase);
+      const s = scale * pulse;
+      ctx.rotate(el.rotZ*Math.PI/180);
+      ctx.drawImage(sp, -sp.width*s/2, -sp.height*s/2, sp.width*s, sp.height*s);
 
-    } else if(el.type === 'photo' && photoCanvases.length){
-      el.rotYLocal += el.vrotYLocal;
-      const sq = Math.abs(Math.cos(el.rotYLocal)) || 0.01;
-      const img = photoCanvases[el.photoIdx];
+    } else if(el.type==='photo'){
+      const img = photoCanvases[el.photoIdx % Math.max(photoCanvases.length,1)];
+      if(!img){ ctx.restore(); continue; }
       const pw=img.width, ph=img.height;
-      ctx.scale(sq, 1);
-      ctx.shadowColor='#ff1493'; ctx.shadowBlur=14;
-      ctx.strokeStyle='rgba(255,77,166,0.65)'; ctx.lineWidth=2/scale;
-      ctx.beginPath(); ctx.roundRect(-pw/2,-ph/2,pw,ph,5); ctx.stroke();
-      ctx.shadowBlur=0;
-      ctx.save(); ctx.beginPath(); ctx.roundRect(-pw/2,-ph/2,pw,ph,5); ctx.clip();
-      ctx.drawImage(img,-pw/2,-ph/2); ctx.restore();
+      el.rotYLocal += el.vrotY * dtScale;
+      const sq = IS_MOBILE ? scale : Math.abs(Math.cos(el.rotYLocal))*scale || 0.001;
+      ctx.rotate(el.rotZ*Math.PI/180);
+      ctx.scale(sq, scale);
+      ctx.drawImage(img, -pw/2, -ph/2);
 
-    } else if(el.type === 'heart'){
-      const p = 1 + .1*Math.sin(t*3 + el.pulsePhase);
-      ctx.scale(p, p);
-      ctx.font=`${el.size}px serif`;
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.shadowColor='#ff1493'; ctx.shadowBlur=18;
-      ctx.fillStyle='#ff4da6';
-      ctx.fillText('❤', 0, 0);
+    } else if(el.type==='heart'){
+      const sp = HEART_SPRITES[el.sizeIdx];
+      if(!sp){ ctx.restore(); continue; }
+      const pulse = 1 + .1*Math.sin(t_time*3+el.pulsePhase);
+      const s = scale * pulse;
+      ctx.rotate(el.rotZ*Math.PI/180);
+      ctx.drawImage(sp, -sp.width*s/2, -sp.height*s/2, sp.width*s, sp.height*s);
     }
 
     ctx.restore();
-    ctx.globalAlpha=1; ctx.shadowBlur=0;
   }
+  ctx.globalAlpha=1;
 
   requestAnimationFrame(frame);
 }
 
-loadImages(IMAGE_FILES);
+/* wait for fonts before building scene */
+document.fonts.ready.then(()=>{ loadImages(IMAGE_FILES); });
 </script>
 </body>
 </html>
